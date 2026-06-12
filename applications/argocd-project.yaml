@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: ml-platform
+  namespace: argocd
+spec:
+  description: "Projeto MLOps - delivery de modelos com canary inteligente"
+
+  # Repositórios Git permitidos
+  sourceRepos:
+    - "*"
+
+  # Clusters e namespaces de destino permitidos
+  destinations:
+    - namespace: ml-production
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+
+  # Recursos Kubernetes que este projeto pode criar
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  namespaceResourceWhitelist:
+    - group: "argoproj.io"
+      kind: Rollout
+    - group: "argoproj.io"
+      kind: AnalysisTemplate
+    - group: ""
+      kind: Service
+    - group: "apps"
+      kind: Deployment

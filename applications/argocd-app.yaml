@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: recommendation-model
+  namespace: argocd
+  labels:
+    team: ml-platform
+    model: recommendation
+spec:
+  project: ml-platform
+
+  # Fonte: seu repositório Git
+  source:
+    # Troca pela URL do seu repo quando tiver no GitHub
+    repoURL: https://github.com/SEU-USUARIO/ml-gitops
+    targetRevision: main
+    path: models/recommendation
+
+  # Destino: cluster local
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ml-production
+
+  syncPolicy:
+    # Sincroniza automaticamente quando detecta mudança no Git
+    automated:
+      prune: true      # Remove recursos deletados do Git
+      selfHeal: true   # Corrige drift manual no cluster
+
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        maxDuration: 1m
+        factor: 2

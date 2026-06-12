@@ -1,0 +1,74 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: recommendation-model
+  namespace: ml-production
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: recommendation-model
+  template:
+    metadata:
+      labels:
+        app: recommendation-model
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: model-server
+          image: recommendation-model:v1
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: MODEL_VERSION
+              value: "v1"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+  strategy:
+    canary:
+      stableService: recommendation-model-stable
+      canaryService: recommendation-model-canary
+      steps:
+        - setWeight: 10
+        - analysis:
+            templates:
+              - templateName: model-quality-check
+            args:
+              - name: canary-weight
+                value: "10"
+        - pause:
+            duration: 30s
+        - setWeight: 50
+        - analysis:
+            templates:
+              - templateName: model-quality-check
+            args:
+              - name: canary-weight
+                value: "50"
+        - pause:
+            duration: 30s
+        - setWeight: 100

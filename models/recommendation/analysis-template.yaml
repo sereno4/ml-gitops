@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: model-quality-check
+  namespace: ml-production
+spec:
+  args:
+    - name: canary-weight
+      value: "10"
+  metrics:
+    - name: auc-roc
+      interval: 30s
+      count: 5
+      failureLimit: 2
+      inconclusiveLimit: 3
+      provider:
+        prometheus:
+          address: http://prometheus-server.monitoring.svc.cluster.local:80
+          query: |
+            avg(model_auc_roc{version="v2"})
+      successCondition: result[0] >= 0.75
+      failureCondition: result[0] < 0.75
+
+    - name: drift-score
+      interval: 30s
+      count: 5
+      failureLimit: 2
+      inconclusiveLimit: 3
+      provider:
+        prometheus:
+          address: http://prometheus-server.monitoring.svc.cluster.local:80
+          query: |
+            avg(model_drift_score{version="v2"})
+      successCondition: result[0] <= 0.30
+      failureCondition: result[0] > 0.30

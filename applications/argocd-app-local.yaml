@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: recommendation-model-local
+  namespace: argocd
+  labels:
+    team: ml-platform
+    env: local
+spec:
+  project: ml-platform
+
+  source:
+    # Aponta para um repositório Git local
+    # Vamos criar um git repo local e sincronizar com ele
+    repoURL: http://gitea-service.gitea.svc.cluster.local:3000/dev/ml-gitops
+    targetRevision: main
+    path: models/recommendation
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ml-production
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
