@@ -1,0 +1,91 @@
+#!/usr/bin/env bpftrace
+
+/*
+ * ml-tracer.bt
+ * Rastreia chamadas de sistema do model server (uvicorn/python3)
+ * em tempo real sem modificar o código da aplicação.
+ *
+ * Uso: sudo bpftrace ml-tracer.bt
+ */
+
+BEGIN
+{
+    printf("=== ML Model Server Tracer ===\n");
+    printf("Rastreando syscalls de processos python3...\n");
+    printf("Pressione Ctrl+C para ver o resumo\n\n");
+}
+
+/* Rastreia latência de chamadas read() — leitura de dados de entrada */
+tracepoint:syscalls:sys_enter_read
+/comm == "python3" || comm == "uvicorn"/
+{
+    @read_start[tid] = nsecs;
+}
+
+tracepoint:syscalls:sys_exit_read
+/@read_start[tid]/
+{
+    $latency = nsecs - @read_start[tid];
+    @read_latency_us = hist($latency / 1000);
+    delete(@read_start[tid]);
+}
+
+/* Rastreia chamadas write() — resposta ao cliente */
+tracepoint:syscalls:sys_enter_write
+/comm == "python3" || comm == "uvicorn"/
+{
+    @write_start[tid] = nsecs;
+}
+
+tracepoint:syscalls:sys_exit_write
+/@write_start[tid]/
+{
+    $latency = nsecs - @write_start[tid];
+    @write_latency_us = hist($latency / 1000);
+    delete(@write_start[tid]);
+}
+
+/* Conta total de syscalls por tipo */
+tracepoint:syscalls:sys_enter_*
+/comm == "python3" || comm == "uvicorn"/
+{
+    @syscalls[probe] = count();
+}
+
+/* Rastreia conexões de rede — detecta chamadas inesperadas */
+tracepoint:syscalls:sys_enter_connect
+/comm == "python3" || comm == "uvicorn"/
+{
+    @network_calls = count();
+    printf("[NETWORK] python3 fez connect() — tid=%d\n", tid);
+}
+
+/* Rastreia abertura de arquivos — detecta leitura de configs/secrets */
+tracepoint:syscalls:sys_enter_openat
+/comm == "python3" || comm == "uvicorn"/
+{
+    @file_opens = count();
+}
+
+/* Resumo a cada 10 segundos */
+interval:s:10
+{
+    printf("\n--- Resumo dos últimos 10s ---\n");
+    printf("Conexões de rede: %d\n", @network_calls);
+    printf("Arquivos abertos: %d\n", @file_opens);
+    print(@syscalls);
+    clear(@syscalls);
+    @network_calls = 0;
+    @file_opens = 0;
+}
+
+END
+{
+    printf("\n=== Resultado Final ===\n");
+    printf("\nLatência read() em microsegundos:\n");
+    print(@read_latency_us);
+    printf("\nLatência write() em microsegundos:\n");
+    print(@write_latency_us);
+    printf("\nTop syscalls:\n");
+    print(@syscalls);
+}

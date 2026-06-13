@@ -1,0 +1,54 @@
+#!/usr/bin/env bpftrace
+
+/*
+ * inference-latency.bt
+ * Mede latência real de inferência no nível do kernel
+ * Correlaciona com requests HTTP via rastreamento de syscalls
+ *
+ * Uso: sudo bpftrace inference-latency.bt
+ */
+
+BEGIN
+{
+    printf("Monitorando latência de inferência...\n");
+    printf("Kernel-level timing — sem overhead de instrumentação\n\n");
+}
+
+/* Detecta início de request HTTP — sys_enter_recvfrom é quando
+   o processo lê dados da conexão TCP */
+tracepoint:syscalls:sys_enter_recvfrom
+/comm == "python3" && args->fd > 3/
+{
+    @req_start[tid] = nsecs;
+    @req_count = count();
+}
+
+/* Detecta fim — sys_enter_sendto é quando envia a resposta */
+tracepoint:syscalls:sys_enter_sendto
+/@req_start[tid]/
+{
+    $duration_ms = (nsecs - @req_start[tid]) / 1000000;
+
+    /* Só loga se parece uma request real (> 1ms) */
+    if ($duration_ms > 1) {
+        printf("[PREDICT] tid=%-6d duração=%-5d ms\n", tid, $duration_ms);
+        @latency_histogram = hist($duration_ms);
+    }
+    delete(@req_start[tid]);
+}
+
+/* Detecta uso de CPU intensivo — sinal de modelo pesado */
+profile:hz:99
+/comm == "python3"/
+{
+    @cpu_samples = count();
+}
+
+interval:s:5
+{
+    printf("\n--- Latência de inferência (ms) ---\n");
+    print(@latency_histogram);
+    printf("CPU samples (proporcional ao uso): %d\n", @cpu_samples);
+    clear(@latency_histogram);
+    @cpu_samples = 0;
+}
