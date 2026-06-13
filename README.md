@@ -25,52 +25,42 @@ git push → Argo CD detecta → Argo Rollouts divide tráfego
 
 ## Arquitetura
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        GitHub Repository                         │
-│                    github.com/sereno4/ml-gitops                  │
-│                                                                   │
-│  models/recommendation/    policies/         logging/            │
-│  ├── rollout.yaml          ├── require-*     └── fluent-bit-*    │
-│  ├── services.yaml         └── disallow-*                        │
-│  └── analysis-template.yaml                                      │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │ git push
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     Kubernetes Cluster (kind)                     │
-│                                                                   │
-│  ┌─────────────┐    ┌──────────────────────────────────────┐    │
-│  │   Argo CD   │───▶│         Argo Rollouts                │    │
-│  │  (GitOps)   │    │                                      │    │
-│  │             │    │  stable (v1) ──── 90% tráfego        │    │
-│  │  Sync every │    │  canary (v2) ──── 10% tráfego        │    │
-│  │  3 minutes  │    │                                      │    │
-│  └─────────────┘    │  AnalysisRun ──── consulta Prometheus│    │
-│                     └──────────────────────────────────────┘    │
-│                                        │                         │
-│  ┌─────────────┐    ┌──────────────────▼───────────────────┐    │
-│  │   Kyverno   │    │              Prometheus               │    │
-│  │  (Policies) │    │                                      │    │
-│  │             │    │  model_auc_roc{version="v2"}         │    │
-│  │  Bloqueia   │    │  model_drift_score{version="v2"}     │    │
-│  │  pods sem   │    │  model_inference_latency_seconds     │    │
-│  │  padrão     │    └──────────────────────────────────────┘    │
-│  └─────────────┘                       │                         │
-│                                        │ scrape /metrics         │
-│  ┌─────────────┐    ┌──────────────────▼───────────────────┐    │
-│  │  Fluent Bit │    │         Model Server (FastAPI)        │    │
-│  │  (Logging)  │◀───│                                      │    │
-│  │             │    │  POST /predict  → JSON log           │    │
-│  │  Coleta     │    │  GET  /metrics  → Prometheus format  │    │
-│  │  logs JSON  │    │  GET  /status   → health + métricas  │    │
-│  │  em tempo   │    │  GET  /simulate/degrade → testes     │    │
-│  │  real       │    └──────────────────────────────────────┘    │
-│  └─────────────┘                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+```mermaid
+flowchart TB
 
----
+    Git["GitHub Repository<br/>ml-gitops<br/><br/>models/recommendation/<br/>policies/<br/>logging/"]
+
+    Git -->|git push| ArgoCD
+
+    subgraph K8s["Kubernetes Cluster (kind)"]
+
+        ArgoCD["Argo CD<br/>(GitOps)<br/><br/>Sync every 3 minutes"]
+
+        Rollouts["Argo Rollouts<br/><br/>stable (v1) → 90% traffic<br/>canary (v2) → 10% traffic"]
+
+        Analysis["AnalysisRun<br/>Prometheus Queries"]
+
+        Kyverno["Kyverno<br/>(Policies)<br/><br/>Require labels<br/>Disallow bad configs"]
+
+        Prom["Prometheus<br/><br/>model_auc_roc<br/>model_drift_score<br/>inference_latency"]
+
+        Model["FastAPI Model Server<br/><br/>POST /predict<br/>GET /metrics<br/>GET /status<br/>GET /simulate/degrade"]
+
+        Fluent["Fluent Bit<br/>(Logging)<br/><br/>Collect JSON Logs"]
+
+        ArgoCD --> Rollouts
+        Rollouts --> Analysis
+        Analysis --> Prom
+
+        Model -->|/metrics| Prom
+
+        Fluent -->|collect logs| Model
+
+        Kyverno -. admission control .-> Model
+        Kyverno -. admission control .-> Rollouts
+
+    end
+```
 
 ## Stack de Tecnologias
 
