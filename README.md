@@ -13,54 +13,70 @@ A maioria dos times faz canary de infraestrutura — CPU, memória, taxa de erro
 Este projeto faz canary de qualidade de modelo: um novo modelo só chega a 100% do tráfego se suas métricas de negócio (AUC-ROC, drift de distribuição, latência P99) ficarem acima dos thresholds configurados durante todo o rollout. Se qualquer métrica degradar, o rollback acontece automaticamente — sem intervenção humana.
 
 
-Arquitetura
+```mermaid
+flowchart TB
 
-┌─────────────────────────────────────────────────────────────────────┐
-│                      GitHub (sereno4/ml-gitops)                      │
-│                                                                       │
-│  models/recommendation/   policies/    logging/    workflows/  ebpf/ │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │ git push
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Kubernetes Cluster (kind)                          │
-│                                                                       │
-│  ┌──────────────┐   ┌─────────────────────────────────────────┐     │
-│  │   Argo CD    │──▶│            Argo Rollouts                 │     │
-│  │   (GitOps)   │   │                                         │     │
-│  │              │   │  stable (v1) ── 90% tráfego             │     │
-│  │  sync: 3min  │   │  canary (v2) ── 10% tráfego             │     │
-│  └──────────────┘   │                                         │     │
-│                     │  AnalysisRun ── consulta Prometheus      │     │
-│  ┌──────────────┐   └─────────────────────────────────────────┘     │
-│  │   Kyverno    │                      │                             │
-│  │  (Policies)  │   ┌──────────────────▼──────────────────────┐     │
-│  │              │   │             Prometheus                    │     │
-│  │  bloqueia    │   │  model_auc_roc{version="v2"}             │     │
-│  │  pods sem    │   │  model_drift_score{version="v2"}         │     │
-│  │  padrão      │   │  model_inference_latency_seconds         │     │
-│  └──────────────┘   └─────────────────────────────────────────┘     │
-│                                        │ scrape /metrics             │
-│  ┌──────────────┐   ┌──────────────────▼──────────────────────┐     │
-│  │  Fluent Bit  │◀──│         Model Server (FastAPI)           │     │
-│  │  (Logging)   │   │                                         │     │
-│  │              │   │  POST /predict  → JSON log              │     │
-│  │  coleta logs │   │  GET  /metrics  → Prometheus format     │     │
-│  │  de predição │   │  GET  /status   → health + métricas     │     │
-│  └──────┬───────┘   │  GET  /simulate/degrade → testes        │     │
-│         │           └─────────────────────────────────────────┘     │
-│         ▼                                                             │
-│  ┌──────────────┐   ┌─────────────────────────────────────────┐     │
-│  │     Loki     │──▶│              Grafana                     │     │
-│  │  (Log Store) │   │  Dashboard de predições em tempo real    │     │
-│  └──────────────┘   └─────────────────────────────────────────┘     │
-│                                                                       │
-│  ┌──────────────┐   ┌─────────────────────────────────────────┐     │
-│  │    eBPF      │   │         Argo Workflows                   │     │
-│  │  (Kernel     │   │  Pipeline de retraining automático       │     │
-│  │  Tracer)     │   │  collect → train → evaluate → promote    │     │
-│  └──────────────┘   └─────────────────────────────────────────┘     │
-└─────────────────────────────────────────────────────────────────────┘
+    Git["GitHub Repository<br/>sereno4/ml-gitops<br/><br/>models/<br/>policies/<br/>logging/<br/>workflows/<br/>ebpf/"]
+
+    Git -->|"git push"| ArgoCD
+
+    subgraph K8s["Kubernetes Cluster (kind)"]
+
+        ArgoCD["Argo CD<br/>GitOps<br/>sync: 3 min"]
+
+        Rollouts["Argo Rollouts"]
+
+        Stable["Model v1<br/>Stable<br/>90% Traffic"]
+
+        Canary["Model v2<br/>Canary<br/>10% Traffic"]
+
+        Analysis["AnalysisRun"]
+
+        Prom["Prometheus<br/><br/>model_auc_roc<br/>model_drift_score<br/>inference_latency"]
+
+        Model["FastAPI Model Server<br/><br/>POST /predict<br/>GET /metrics<br/>GET /status<br/>GET /simulate/degrade"]
+
+        Fluent["Fluent Bit"]
+
+        Loki["Loki"]
+
+        Grafana["Grafana<br/>Real-time Dashboards"]
+
+        Kyverno["Kyverno<br/>Policies"]
+
+        Workflow["Argo Workflows<br/><br/>collect<br/>train<br/>evaluate<br/>promote"]
+
+        EBPF["eBPF Tracer<br/>Kernel Observability"]
+
+        ArgoCD --> Rollouts
+
+        Rollouts --> Stable
+        Rollouts --> Canary
+
+        Stable --> Model
+        Canary --> Model
+
+        Model -->|"scrape /metrics"| Prom
+
+        Prom --> Analysis
+
+        Analysis --> Rollouts
+
+        Model -->|"JSON logs"| Fluent
+
+        Fluent --> Loki
+
+        Loki --> Grafana
+
+        Workflow --> Rollouts
+
+        EBPF -. syscall tracing .-> Model
+
+        Kyverno -. admission control .-> Rollouts
+        Kyverno -. admission control .-> Model
+
+    end
+```
 
 
 Stack de Tecnologias
