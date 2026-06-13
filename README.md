@@ -146,60 +146,34 @@ Padrão 12-factor app — o container não sabe para onde os logs vão. O Fluent
 
 ml-gitops/
 │
-├── apps/
-│   └── recommendation/
-│       ├── namespace.yaml
-│       ├── rollout.yaml
-│       ├── services.yaml
-│       └── analysis-template.yaml
+├── 📦 apps/                          # Aplicações ML
+│   └── recommendation/               # Sistema de recomendação
+│       ├── rollout.yaml              # Canary deployment config
+│       ├── services.yaml             # Kubernetes services
+│       └── analysis-template.yaml    # Métricas de validação
 │
-├── platform/
-│   ├── argocd/
-│   │   ├── project.yaml
-│   │   └── application.yaml
-│   │
-│   ├── kyverno/
-│   │   ├── require-prometheus-annotations.yaml
-│   │   ├── require-resource-limits.yaml
-│   │   └── disallow-latest-tag.yaml
-│   │
-│   ├── observability/
-│   │   ├── fluent-bit/
-│   │   │   └── configmap.yaml
-│   │   │
-│   │   ├── loki/
-│   │   │   └── values.yaml
-│   │   │
-│   │   ├── grafana/
-│   │   │   └── dashboards/
-│   │   │
-│   │   └── prometheus/
-│   │       └── alert-rules.yaml
-│   │
-│   └── ebpf/
-│       ├── ml-tracer.bt
-│       ├── inference-latency.bt
-│       └── run-ebpf-monitor.sh
+├── ⚙️ platform/                      # Infraestrutura
+│   ├── argocd/                       # GitOps controller
+│   ├── kyverno/                      # Políticas de segurança
+│   ├── observability/                # Monitoring stack
+│   │   ├── fluent-bit/               # Log collection
+│   │   ├── loki/                     # Log aggregation
+│   │   ├── grafana/                  # Dashboards
+│   │   └── prometheus/               # Metrics + alerts
+│   └── ebpf/                         # Kernel-level tracing (v0.4)
 │
-├── workflows/
-│   └── retraining/
-│       ├── workflow-template.yaml
-│       ├── retrain-script.py
-│       └── Dockerfile
+├── 🔄 workflows/                     # ML Pipelines
+│   └── retraining/                   # Auto-retraining (v0.3)
 │
-├── services/
-│   └── recommendation-api/
-│       ├── main_v1.py
-│       ├── main_v2.py
-│       ├── Dockerfile.v1
-│       └── Dockerfile.v2
+├── 🔧 services/                      # Código das aplicações
+│   └── recommendation-api/           # FastAPI server
+│       ├── main_v1.py                # Versão estável
+│       └── main_v2.py                # Nova versão (canary)
 │
-└── docs/
+└── 📚 docs/                          # Documentação
     ├── architecture.md
     ├── diagrams/
     └── screenshots/
-
-Instalação Rápida
 
 Pré-requisitos
 
