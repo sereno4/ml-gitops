@@ -1,0 +1,76 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: ml-retraining-pipeline
+  namespace: argo
+  labels:
+    team: ml-platform
+spec:
+  entrypoint: retraining-pipeline
+  serviceAccountName: argo-workflows
+
+  # Volume compartilhado entre os steps
+  volumeClaimTemplates:
+    - metadata:
+        name: workdir
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+
+  templates:
+    # Pipeline principal — orquestra os steps em sequência
+    - name: retraining-pipeline
+      steps:
+        - - name: collect-data
+            template: run-step
+            arguments:
+              parameters:
+                - name: step
+                  value: collect
+
+        - - name: train-model
+            template: run-step
+            arguments:
+              parameters:
+                - name: step
+                  value: train
+
+        - - name: evaluate-model
+            template: run-step
+            arguments:
+              parameters:
+                - name: step
+                  value: evaluate
+
+        - - name: decide-promote
+            template: run-step
+            arguments:
+              parameters:
+                - name: step
+                  value: decide
+
+    # Template genérico — cada step roda o mesmo script com STEP diferente
+    - name: run-step
+      inputs:
+        parameters:
+          - name: step
+      container:
+        image: recommendation-model:v2
+        imagePullPolicy: Never
+        command: [python3]
+        args: [/app/retrain.py]
+        env:
+          - name: STEP
+            value: "{{inputs.parameters.step}}"
+        volumeMounts:
+          - name: workdir
+            mountPath: /tmp
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
