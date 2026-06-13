@@ -144,39 +144,60 @@ Por que o model server loga no stdout?
 Padrão 12-factor app — o container não sabe para onde os logs vão. O Fluent Bit decide o destino. Hoje vai para Loki; amanhã vai para S3, Kafka ou Elasticsearch sem mudar uma linha do model server.
 
 
-Estrutura do Repositório
-
 ml-gitops/
-├── models/
+│
+├── apps/
 │   └── recommendation/
-│       ├── namespace.yaml           # Namespace ml-production
-│       ├── rollout.yaml             # Argo Rollout com estratégia canary
-│       ├── services.yaml            # Services stable e canary
-│       └── analysis-template.yaml  # Queries Prometheus para validação
-├── policies/
-│   ├── require-prometheus-annotations.yaml
-│   ├── require-resource-limits.yaml
-│   └── disallow-latest-tag.yaml
-├── logging/
-│   └── fluent-bit-configmap.yaml   # Pipeline Fluent Bit → Loki
+│       ├── namespace.yaml
+│       ├── rollout.yaml
+│       ├── services.yaml
+│       └── analysis-template.yaml
+│
+├── platform/
+│   ├── argocd/
+│   │   ├── project.yaml
+│   │   └── application.yaml
+│   │
+│   ├── kyverno/
+│   │   ├── require-prometheus-annotations.yaml
+│   │   ├── require-resource-limits.yaml
+│   │   └── disallow-latest-tag.yaml
+│   │
+│   ├── observability/
+│   │   ├── fluent-bit/
+│   │   │   └── configmap.yaml
+│   │   │
+│   │   ├── loki/
+│   │   │   └── values.yaml
+│   │   │
+│   │   ├── grafana/
+│   │   │   └── dashboards/
+│   │   │
+│   │   └── prometheus/
+│   │       └── alert-rules.yaml
+│   │
+│   └── ebpf/
+│       ├── ml-tracer.bt
+│       ├── inference-latency.bt
+│       └── run-ebpf-monitor.sh
+│
 ├── workflows/
-│   ├── workflow-template.yaml      # Pipeline de retraining (4 steps)
-│   ├── retrain-script.py           # Script de treino
-│   └── drift-alert-rule.yaml       # Regras de alerta do Prometheus
-├── ebpf/
-│   ├── ml-tracer.bt                # Tracer de syscalls do model server
-│   ├── inference-latency.bt        # Tracer de latência de inferência
-│   └── run-ebpf-monitor.sh         # Script de monitoramento
-├── applications/
-│   ├── argocd-project.yaml         # AppProject ml-platform
-│   └── argocd-app.yaml             # Application → github.com/sereno4/ml-gitops
-└── model-server/
-    ├── main_v1.py                  # Model server v1 (stable)
-    ├── main_v2.py                  # Model server v2 com JSON logging
-    ├── Dockerfile.v1
-    ├── Dockerfile.v2
-    └── Dockerfile.retrain          # Imagem para o pipeline de retraining
-
+│   └── retraining/
+│       ├── workflow-template.yaml
+│       ├── retrain-script.py
+│       └── Dockerfile
+│
+├── services/
+│   └── recommendation-api/
+│       ├── main_v1.py
+│       ├── main_v2.py
+│       ├── Dockerfile.v1
+│       └── Dockerfile.v2
+│
+└── docs/
+    ├── architecture.md
+    ├── diagrams/
+    └── screenshots/
 
 Instalação Rápida
 
