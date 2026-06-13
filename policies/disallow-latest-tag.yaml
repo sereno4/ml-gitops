@@ -1,0 +1,30 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/title: "Proíbe tag latest em produção"
+    policies.kyverno.io/description: >
+      Imagens com tag 'latest' são não-determinísticas — o mesmo deploy
+      pode puxar versões diferentes. Em ml-production toda imagem deve
+      ter uma tag semântica explícita (v1, v2, sha256, etc).
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: disallow-latest
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - ml-production
+      validate:
+        message: >
+          Imagens com tag ':latest' são proibidas em ml-production.
+          Use uma tag explícita como :v1, :v2 ou o digest sha256.
+        pattern:
+          spec:
+            containers:
+              - image: "!*:latest"

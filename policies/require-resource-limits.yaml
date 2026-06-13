@@ -1,0 +1,47 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-resource-limits
+  annotations:
+    policies.kyverno.io/title: "Requer resource limits"
+    policies.kyverno.io/description: >
+      Todo pod em ml-production deve ter CPU e memory limits definidos
+      e a label team para rastreabilidade de custo.
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: check-resource-limits
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - ml-production
+      validate:
+        message: >
+          Todo container em ml-production deve ter resources.limits
+          com cpu e memory definidos
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"
+
+    - name: check-team-label
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - ml-production
+      validate:
+        message: "Pod deve ter a label 'team' definida (ex: team: ml-platform)"
+        pattern:
+          metadata:
+            labels:
+              team: "?*"

@@ -9,28 +9,22 @@ metadata:
 spec:
   project: ml-platform
 
-  # Fonte: seu repositório Git
   source:
-    # Troca pela URL do seu repo quando tiver no GitHub
-    repoURL: https://github.com/SEU-USUARIO/ml-gitops
+    repoURL: https://github.com/sereno4/ml-gitops
     targetRevision: main
     path: models/recommendation
 
-  # Destino: cluster local
   destination:
     server: https://kubernetes.default.svc
     namespace: ml-production
 
   syncPolicy:
-    # Sincroniza automaticamente quando detecta mudança no Git
     automated:
-      prune: true      # Remove recursos deletados do Git
-      selfHeal: true   # Corrige drift manual no cluster
-
+      prune: true
+      selfHeal: true
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
-
     retry:
       limit: 3
       backoff:

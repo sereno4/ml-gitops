@@ -1,0 +1,32 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-prometheus-annotations
+  annotations:
+    policies.kyverno.io/title: "Requer anotações do Prometheus"
+    policies.kyverno.io/description: >
+      Todo pod no namespace ml-production deve ter as anotações
+      prometheus.io/scrape, prometheus.io/port e prometheus.io/path.
+      Sem isso o Prometheus não coleta métricas e o AnalysisTemplate falha.
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: check-prometheus-annotations
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - ml-production
+      validate:
+        message: >
+          Pod em ml-production deve ter as anotações:
+          prometheus.io/scrape=true, prometheus.io/port e prometheus.io/path
+        pattern:
+          metadata:
+            annotations:
+              prometheus.io/scrape: "true"
+              prometheus.io/port: "?*"
+              prometheus.io/path: "?*"

@@ -1,4 +1,4 @@
-import random, time, os
+import random, time, os, json, sys
 from fastapi import FastAPI
 from prometheus_client import Gauge, Histogram, Counter, generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
@@ -15,6 +15,21 @@ preds = Counter("model_predictions_total", "Predictions", ["version","outcome"])
 auc.labels(version=VERSION).set(0.85)
 drift.labels(version=VERSION).set(0.07)
 
+def log_prediction(input_data: dict, output: dict, latency: float):
+    """Loga predição em JSON estruturado — Fluent Bit parseia isso"""
+    record = {
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "event": "prediction",
+        "version": VERSION,
+        "input": input_data,
+        "output": output,
+        "latency_ms": round(latency * 1000, 2),
+        "auc_roc": round(auc.labels(version=VERSION)._value.get(), 4),
+        "drift_score": round(drift.labels(version=VERSION)._value.get(), 4)
+    }
+    # Escreve no stdout como JSON — Fluent Bit coleta do stdout do container
+    print(json.dumps(record), flush=True)
+
 @app.get("/health/ready")
 def ready(): return {"status": "ready", "version": VERSION}
 
@@ -22,23 +37,32 @@ def ready(): return {"status": "ready", "version": VERSION}
 def live(): return {"status": "alive", "version": VERSION}
 
 @app.post("/predict")
-def predict():
+def predict(payload: dict = None):
     start = time.time()
     time.sleep(random.uniform(0.01, 0.04))
+
+    input_data = payload or {"features": [round(random.random(), 3) for _ in range(5)]}
     score = random.random()
     outcome = "positive" if score > 0.5 else "negative"
+
     cur = auc.labels(version=VERSION)._value.get()
     auc.labels(version=VERSION).set(max(0.5, min(1.0, cur + random.uniform(-0.005,0.005))))
     cur_d = drift.labels(version=VERSION)._value.get()
     drift.labels(version=VERSION).set(max(0.0, min(1.0, cur_d + random.uniform(-0.003,0.003))))
-    lat.labels(version=VERSION).observe(time.time() - start)
+
+    latency = time.time() - start
+    lat.labels(version=VERSION).observe(latency)
     preds.labels(version=VERSION, outcome=outcome).inc()
-    return {"score": round(score,4), "outcome": outcome, "version": VERSION}
+
+    output = {"score": round(score,4), "outcome": outcome, "version": VERSION}
+    log_prediction(input_data, output, latency)
+    return output
 
 @app.get("/simulate/degrade")
 def degrade():
     auc.labels(version=VERSION).set(0.55)
     drift.labels(version=VERSION).set(0.85)
+    log_prediction({"event": "degradation_triggered"}, {}, 0)
     return {"message": "degradado", "auc": 0.55, "drift": 0.85}
 
 @app.get("/simulate/recover")

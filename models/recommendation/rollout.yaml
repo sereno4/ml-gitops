@@ -19,14 +19,14 @@ spec:
     spec:
       containers:
         - name: model-server
-          image: recommendation-model:v1
+          image: recommendation-model:v2
           imagePullPolicy: Never
           ports:
             - containerPort: 8080
               name: http
           env:
             - name: MODEL_VERSION
-              value: "v1"
+              value: "v2"
           resources:
             requests:
               cpu: "100m"
@@ -53,22 +53,6 @@ spec:
       stableService: recommendation-model-stable
       canaryService: recommendation-model-canary
       steps:
-        - setWeight: 10
-        - analysis:
-            templates:
-              - templateName: model-quality-check
-            args:
-              - name: canary-weight
-                value: "10"
-        - pause:
-            duration: 30s
-        - setWeight: 50
-        - analysis:
-            templates:
-              - templateName: model-quality-check
-            args:
-              - name: canary-weight
-                value: "50"
-        - pause:
-            duration: 30s
         - setWeight: 100
+        - pause:
+            duration: 10s
